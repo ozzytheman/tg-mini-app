@@ -1,30 +1,22 @@
 const express = require('express');
+const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
-async function connectToDatabase() {
-  try {
-    await client.connect();
-    console.log('Connected to MongoDB');
-    return client.db('tg-mini-app-db'); // We'll use this database name
-  } catch (error) {
-    console.error('Error connecting to MongoDB:', error);
-    process.exit(1);
-  }
-}
-
 let database;
 
 app.post('/api/create-user', async (req, res) => {
+  console.log('Received create-user request:', req.body);
   try {
     const { telegramId, firstName, lastName, referredBy } = req.body;
     const users = database.collection('users');
@@ -38,17 +30,20 @@ app.post('/api/create-user', async (req, res) => {
       { upsert: true, returnDocument: 'after' }
     );
 
+    console.log('User created/updated:', user);
+
     if (referredBy) {
       await users.updateOne(
         { _id: new ObjectId(referredBy) },
         { $addToSet: { referrals: user._id } }
       );
+      console.log('Referral updated for user:', referredBy);
     }
 
     res.json({ success: true, message: 'User created/updated successfully', userId: user._id });
   } catch (error) {
     console.error('Error creating/updating user:', error);
-    res.status(500).json({ success: false, message: 'Error creating/updating user' });
+    res.status(500).json({ success: false, message: 'Error creating/updating user', error: error.message });
   }
 });
 
