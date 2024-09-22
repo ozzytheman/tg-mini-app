@@ -42,6 +42,55 @@
             log(message);
         }
 
+        function initializeApp() {
+            log('Initializing app...');
+            if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+                updateStatus('Error: User data is not available');
+                log('initDataUnsafe: ' + JSON.stringify(tg.initDataUnsafe));
+                return;
+            }
+
+            const { id, first_name, last_name } = tg.initDataUnsafe.user;
+            log(`User data: id=${id}, first_name=${first_name}, last_name=${last_name}`);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const referredBy = urlParams.get('ref');
+            log(`Referral parameter: ${referredBy}`);
+
+            fetch('/api/create-user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    telegramId: id,
+                    firstName: first_name,
+                    lastName: last_name,
+                    referredBy
+                }),
+            })
+            .then(response => {
+                log(`Server response status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                log(`Server response data: ${JSON.stringify(data)}`);
+                if (data.success) {
+                    updateStatus('User created/updated successfully!');
+                    userId = data.userId;
+                    document.getElementById('getReferralLink').style.display = 'block';
+                    updateReferralStats();
+                } else {
+                    updateStatus('Error creating/updating user: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                updateStatus('An error occurred while creating/updating user.');
+                log(`Error details: ${error.message}`);
+            });
+        }
+
         log('Script started');
 
         if (!tg) {
@@ -50,54 +99,20 @@
             log('Telegram WebApp object is available');
             tg.expand();
 
+            // Set a timeout to initialize the app if ready doesn't fire
+            let readyFired = false;
+            setTimeout(() => {
+                if (!readyFired) {
+                    log('Ready event did not fire within 3 seconds. Initializing app anyway.');
+                    initializeApp();
+                }
+            }, 3000);
+
             tg.ready(() => {
+                readyFired = true;
                 log('Telegram WebApp is ready');
                 updateStatus('Telegram WebApp is ready. Creating/updating user...');
-                
-                if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
-                    updateStatus('Error: User data is not available');
-                    return;
-                }
-
-                const { id, first_name, last_name } = tg.initDataUnsafe.user;
-                log(`User data: id=${id}, first_name=${first_name}, last_name=${last_name}`);
-
-                const urlParams = new URLSearchParams(window.location.search);
-                const referredBy = urlParams.get('ref');
-                log(`Referral parameter: ${referredBy}`);
-
-                fetch('/api/create-user', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        telegramId: id,
-                        firstName: first_name,
-                        lastName: last_name,
-                        referredBy
-                    }),
-                })
-                .then(response => {
-                    log(`Server response status: ${response.status}`);
-                    return response.json();
-                })
-                .then(data => {
-                    log(`Server response data: ${JSON.stringify(data)}`);
-                    if (data.success) {
-                        updateStatus('User created/updated successfully!');
-                        userId = data.userId;
-                        document.getElementById('getReferralLink').style.display = 'block';
-                        updateReferralStats();
-                    } else {
-                        updateStatus('Error creating/updating user: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    updateStatus('An error occurred while creating/updating user.');
-                    log(`Error details: ${error.message}`);
-                });
+                initializeApp();
             });
         }
 
